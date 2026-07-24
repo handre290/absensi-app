@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { getUsers, saveUsers } from "@/lib/db";
+import { getUsers, updateUser, deleteUser } from "@/lib/db";
 import { User } from "@/lib/types";
 
 export default function AdminMembersPage() {
@@ -19,24 +19,18 @@ export default function AdminMembersPage() {
     }
   }, [user, loading, router]);
 
-  const loadMembers = () => {
-    const allUsers = getUsers();
+  const loadMembers = async () => {
+    const allUsers = await getUsers();
     setMembers(allUsers.filter((u) => u.role === "member"));
   };
 
-  const handleApprove = (memberId: string) => {
-    const allUsers = getUsers();
-    const updatedUsers = allUsers.map((m) =>
-      m.id === memberId ? { ...m, approved: true } : m
-    );
-    saveUsers(updatedUsers);
+  const handleApprove = async (memberId: string) => {
+    await updateUser(memberId, { approved: true });
     loadMembers();
   };
 
-  const handleReject = (memberId: string) => {
-    const allUsers = getUsers();
-    const updatedUsers = allUsers.filter((m) => m.id !== memberId);
-    saveUsers(updatedUsers);
+  const handleReject = async (memberId: string) => {
+    await deleteUser(memberId);
     loadMembers();
   };
 

@@ -23,18 +23,20 @@ export default function DashboardPage() {
     }
   }, [user, loading, router]);
 
-  const checkTodayAttendance = (userId: string) => {
-    setHasAttendedToday(!!getTodayAttendance(userId));
+  const checkTodayAttendance = async (userId: string) => {
+    const result = await getTodayAttendance(userId);
+    setHasAttendedToday(!!result);
   };
 
-  const loadAttendanceRecords = (userId: string) => {
-    setAttendanceRecords(getUserAttendance(userId));
+  const loadAttendanceRecords = async (userId: string) => {
+    const records = await getUserAttendance(userId);
+    setAttendanceRecords(records);
   };
 
-  const handleAttend = () => {
+  const handleAttend = async () => {
     if (user) {
       const now = new Date();
-      addAttendance({
+      await addAttendance({
         userId: user.id,
         date: now.toISOString().split("T")[0],
         timestamp: now.toTimeString().split(" ")[0].substring(0, 8),

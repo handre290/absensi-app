@@ -24,9 +24,9 @@ export default function AdminPage() {
     }
   }, [user, loading, router]);
 
-  const loadData = () => {
-    setAllAttendance(getAttendance());
-    setAllUsers(getUsers());
+  const loadData = async () => {
+    setAllAttendance(await getAttendance());
+    setAllUsers(await getUsers());
   };
 
   const getMemberName = (userId: string) => {

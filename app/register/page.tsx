@@ -25,11 +25,11 @@ export default function RegisterPage() {
     }
   }, [user, router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
-    const result = register(name, username, password);
+    const result = await register(name, username, password);
     if (result.success) {
       setSuccess("Registrasi berhasil! Mohon tunggu persetujuan admin.");
       setName("");

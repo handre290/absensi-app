@@ -23,10 +23,10 @@ export default function LoginPage() {
     }
   }, [user, router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const result = login(username, password);
+    const result = await login(username, password);
     if (result.success && result.user) {
       loginUser(result.user);
       if (result.user.role === "admin") {

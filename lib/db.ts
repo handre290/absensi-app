@@ -1,67 +1,183 @@
-import { User, Attendance } from "./types";
+import { supabase } from "./supabase";
+import { User } from "./types";
 
-const USERS_KEY = "absensi_users";
-const ATTENDANCE_KEY = "absensi_attendance";
+// ── Login ──
 
-function genId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
+export async function login(
+  username: string,
+  password: string
+): Promise<{ success: boolean; error?: string; user?: User }> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("username", username)
+    .single();
 
-// ── Users ──
-
-export function getUsers(): User[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(USERS_KEY);
-  if (!raw) {
-    // seed admin default
-    const seed: User[] = [
-      {
-        id: genId(),
-        username: "admin",
-        password: "admin123",
-        name: "Administrator",
-        role: "admin",
-        approved: true,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    localStorage.setItem(USERS_KEY, JSON.stringify(seed));
-    return seed;
+  if (error || !data) {
+    return { success: false, error: "Username atau password salah" };
   }
-  return JSON.parse(raw);
+
+  if (data.password !== password) {
+    return { success: false, error: "Username atau password salah" };
+  }
+
+  if (!data.approved) {
+    return { success: false, error: "Akun belum disetujui admin" };
+  }
+
+  const user: User = {
+    id: data.id,
+    username: data.username,
+    password: data.password,
+    name: data.name,
+    role: data.role,
+    approved: data.approved,
+    createdAt: data.created_at,
+  };
+
+  return { success: true, user };
 }
 
-export function saveUsers(users: User[]) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+// ── Register ──
+
+export async function register(
+  name: string,
+  username: string,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  // Cek duplikat
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id")
+    .eq("username", username)
+    .maybeSingle();
+
+  if (existing) {
+    return { success: false, error: "Username sudah digunakan" };
+  }
+
+  const { error } = await supabase.from("users").insert({
+    username,
+    password,
+    name,
+    role: "member",
+    approved: false,
+  });
+
+  if (error) {
+    return { success: false, error: "Gagal mendaftar: " + error.message };
+  }
+
+  return { success: true };
+}
+
+// ── Get Users ──
+
+export async function getUsers(): Promise<User[]> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  if (error) return [];
+  return data.map((u: any) => ({
+    id: u.id,
+    username: u.username,
+    password: u.password,
+    name: u.name,
+    role: u.role,
+    approved: u.approved,
+    createdAt: u.created_at,
+  }));
+}
+
+export async function saveUsers(_users: User[]) {
+  // Tidak perlu implementasi karena update via Supabase langsung
+}
+
+// ── Update User ──
+
+export async function updateUser(
+  id: string,
+  updates: Partial<{ approved: boolean }>
+): Promise<void> {
+  await supabase.from("users").update(updates).eq("id", id);
+}
+
+// ── Delete User ──
+
+export async function deleteUser(id: string): Promise<void> {
+  await supabase.from("users").delete().eq("id", id);
 }
 
 // ── Attendance ──
 
-export function getAttendance(): Attendance[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(ATTENDANCE_KEY);
-  return raw ? JSON.parse(raw) : [];
+export async function getAttendance(): Promise<any[]> {
+  const { data, error } = await supabase
+    .from("attendance")
+    .select("*")
+    .order("date", { ascending: false })
+    .order("timestamp", { ascending: false });
+
+  if (error) return [];
+  return data.map((a: any) => ({
+    id: a.id,
+    userId: a.user_id,
+    date: a.date,
+    timestamp: a.timestamp,
+    status: a.status,
+  }));
 }
 
-export function saveAttendance(records: Attendance[]) {
-  localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(records));
+export async function getUserAttendance(userId: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from("attendance")
+    .select("*")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .order("timestamp", { ascending: false });
+
+  if (error) return [];
+  return data.map((a: any) => ({
+    id: a.id,
+    userId: a.user_id,
+    date: a.date,
+    timestamp: a.timestamp,
+    status: a.status,
+  }));
 }
 
-export function addAttendance(record: Omit<Attendance, "id">): Attendance {
-  const all = getAttendance();
-  const newRecord: Attendance = { ...record, id: genId() };
-  all.push(newRecord);
-  saveAttendance(all);
-  return newRecord;
-}
-
-export function getUserAttendance(userId: string): Attendance[] {
-  return getAttendance().filter((a) => a.userId === userId);
-}
-
-export function getTodayAttendance(userId: string): Attendance | undefined {
+export async function getTodayAttendance(userId: string): Promise<any | undefined> {
   const today = new Date().toISOString().split("T")[0];
-  return getAttendance().find(
-    (a) => a.userId === userId && a.date === today
-  );
+  const { data, error } = await supabase
+    .from("attendance")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date", today)
+    .maybeSingle();
+
+  if (error || !data) return undefined;
+  return {
+    id: data.id,
+    userId: data.user_id,
+    date: data.date,
+    timestamp: data.timestamp,
+    status: data.status,
+  };
+}
+
+export async function addAttendance(record: {
+  userId: string;
+  date: string;
+  timestamp: string;
+  status: string;
+}): Promise<any> {
+  const { error } = await supabase.from("attendance").insert({
+    user_id: record.userId,
+    date: record.date,
+    timestamp: record.timestamp,
+    status: record.status,
+  });
+
+  if (error) throw new Error(error.message);
 }
