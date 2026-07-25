@@ -445,11 +445,13 @@ function CalendarView({ records }: { records: Attendance[] }) {
             const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const attended = attendedDates.has(dateStr);
             const isToday = dateStr === today;
+            const isSunday = i % 7 === 0;
             return (
               <div
                 key={dateStr}
                 className={`relative aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition
-                  ${attended ? "bg-green-100 text-green-800" : "bg-red-50 text-red-400"}
+                  ${attended ? "bg-green-100" : "bg-red-50"}
+                  ${isSunday ? "text-red-500" : "text-gray-900"}
                   ${isToday ? "ring-2 ring-indigo-400 ring-offset-1" : ""}
                 `}
               >
