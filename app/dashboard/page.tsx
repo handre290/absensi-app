@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { addAttendance, getTodayAttendance, getUserAttendance, uploadPhoto } from "@/lib/db";
@@ -23,6 +23,8 @@ export default function DashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
 
   useEffect(() => {
     if (!loading && !user) {
@@ -377,77 +379,126 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* History Card */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-        <div className="px-8 py-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">Riwayat Absensi</h2>
-        </div>
-        <div className="p-8">
-          {attendanceRecords.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">Belum ada riwayat absensi.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tanggal</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Waktu</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Lokasi</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Foto</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {attendanceRecords
-                    .sort((a, b) => new Date(b.date + " " + b.timestamp).getTime() - new Date(a.date + " " + a.timestamp).getTime())
-                    .map((record) => (
-                      <tr key={record.id} className="hover:bg-gray-50 transition">
-                        <td className="px-4 py-4 text-sm text-gray-900">{record.date}</td>
-                        <td className="px-4 py-4 text-sm text-gray-500">{record.timestamp}</td>
-                        <td className="px-4 py-4 text-sm text-gray-500">
-                          {record.latitude && record.longitude ? (
-                            <a
-                              href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-indigo-600 hover:text-indigo-800 underline"
-                            >
-                              {record.latitude.toFixed(4)}, {record.longitude.toFixed(4)}
-                            </a>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          {record.photo_url ? (
-                            <a href={record.photo_url} target="_blank" rel="noopener noreferrer">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={record.photo_url}
-                                alt="foto absen"
-                                className="w-12 h-12 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
-                              />
-                            </a>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {record.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Calendar Card */}
+      <CalendarView records={attendanceRecords} />
 
       {/* hidden canvas for photo capture */}
       <canvas ref={canvasRef} className="hidden" />
+    </div>
+  );
+}
+
+// ── Calendar Component ──
+
+const MONTHS = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+function CalendarView({ records }: { records: Attendance[] }) {
+  const [month, setMonth] = useState(() => new Date().getMonth());
+  const [year, setYear] = useState(() => new Date().getFullYear());
+
+  const attendedDates = useMemo(() => {
+    const s = new Set<string>();
+    records.forEach((r) => s.add(r.date));
+    return s;
+  }, [records]);
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const today = new Date().toISOString().split("T")[0];
+
+  const prev = () => { if (month === 0) { setMonth(11); setYear((y) => y - 1); } else setMonth((m) => m - 1); };
+  const next = () => { if (month === 11) { setMonth(0); setYear((y) => y + 1); } else setMonth((m) => m + 1); };
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+      <div className="px-8 py-6 border-b border-gray-100">
+        <h2 className="text-lg font-semibold text-gray-900">Kalender Absensi</h2>
+      </div>
+      <div className="p-6">
+        {/* nav */}
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={prev} className="p-2 hover:bg-gray-100 rounded-lg transition">
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <span className="text-base font-semibold text-gray-800">{MONTHS[month]} {year}</span>
+          <button onClick={next} className="p-2 hover:bg-gray-100 rounded-lg transition">
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+        {/* day headers */}
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((d) => (
+            <div key={d} className="text-center text-xs font-semibold text-gray-400 py-2">{d}</div>
+          ))}
+        </div>
+        {/* calendar grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((day, i) => {
+            if (day === null) return <div key={`e-${i}`} />;
+            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+            const attended = attendedDates.has(dateStr);
+            const isToday = dateStr === today;
+            return (
+              <div
+                key={dateStr}
+                className={`relative aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition
+                  ${attended ? "bg-green-100 text-green-800" : "bg-red-50 text-red-400"}
+                  ${isToday ? "ring-2 ring-indigo-400 ring-offset-1" : ""}
+                `}
+              >
+                {day}
+                {attended && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {/* legend */}
+        <div className="flex items-center justify-center space-x-6 mt-4 text-xs text-gray-500">
+          <span className="flex items-center space-x-1">
+            <span className="w-3 h-3 rounded-sm bg-green-100" /> <span>Hadir</span>
+          </span>
+          <span className="flex items-center space-x-1">
+            <span className="w-3 h-3 rounded-sm bg-red-50" /> <span>Belum absen / Tidak hadir</span>
+          </span>
+        </div>
+        {/* detail */}
+        {records.length > 0 && (
+          <div className="mt-6 border-t border-gray-100 pt-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Detail Absensi</h3>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {[...records]
+                .sort((a, b) => new Date(b.date + " " + b.timestamp).getTime() - new Date(a.date + " " + a.timestamp).getTime())
+                .slice(0, 30)
+                .map((r) => (
+                  <div key={r.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <span className="text-gray-700 font-medium shrink-0">{r.date}</span>
+                      <span className="text-gray-400 shrink-0">{r.timestamp}</span>
+                      {r.latitude && r.longitude && (
+                        <a href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-700 shrink-0 text-xs">📍</a>
+                      )}
+                      {r.photo_url && (
+                        <a href={r.photo_url} target="_blank" rel="noopener noreferrer">
+                          <img src={r.photo_url} alt="" className="w-6 h-6 rounded object-cover" />
+                        </a>
+                      )}
+                    </div>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0">hadir</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
