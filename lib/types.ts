@@ -14,4 +14,7 @@ export interface Attendance {
   date: string; // YYYY-MM-DD
   timestamp: string; // HH:mm:ss
   status: "hadir";
+  latitude?: number | null;
+  longitude?: number | null;
+  photo_url?: string | null;
 }

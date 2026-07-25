@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
@@ -44,20 +44,84 @@ export default function AdminPage() {
     return record.date === filterDate;
   });
 
-  const exportToExcel = () => {
-    const dataToExport = filteredAttendance.map((record, index) => ({
-      No: index + 1,
-      "Nama Anggota": getMemberName(record.userId),
-      Username: getMemberUsername(record.userId),
-      Tanggal: record.date,
-      "Waktu Absen": record.timestamp,
-      Status: record.status,
-    }));
+  const exportToExcel = async () => {
+    const ExcelJS = (await import("exceljs")).default;
 
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Absensi");
-    XLSX.writeFile(workbook, "Data_Absensi.xlsx");
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Data Absensi");
+
+    // Columns
+    ws.columns = [
+      { header: "No", key: "no", width: 5 },
+      { header: "Nama Anggota", key: "nama", width: 22 },
+      { header: "Username", key: "username", width: 16 },
+      { header: "Tanggal", key: "tanggal", width: 14 },
+      { header: "Waktu Absen", key: "waktu", width: 14 },
+      { header: "Koordinat", key: "koordinat", width: 22 },
+      { header: "Foto", key: "foto", width: 14 },
+      { header: "Status", key: "status", width: 10 },
+    ];
+
+    // Header row
+    const headerRow = ws.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    // Rows
+    for (let i = 0; i < filteredAttendance.length; i++) {
+      const record = filteredAttendance[i];
+      ws.addRow({
+        no: i + 1,
+        nama: getMemberName(record.userId),
+        username: getMemberUsername(record.userId),
+        tanggal: record.date,
+        waktu: record.timestamp,
+        koordinat: record.latitude && record.longitude
+          ? `${record.latitude}, ${record.longitude}`
+          : "-",
+        foto: record.photo_url ? "Lihat foto" : "-",
+        status: record.status,
+      });
+
+      // Set row height for photo
+      const row = ws.getRow(i + 2);
+      row.height = 75;
+
+      // Embed photo if exists
+      if (record.photo_url) {
+        try {
+          const res = await fetch(record.photo_url);
+          const blob = await res.blob();
+          const buffer = await blob.arrayBuffer();
+          const ext = (blob.type.split("/")[1] || "jpeg") as "jpeg" | "png" | "gif";
+          const imgId = wb.addImage({ buffer, extension: ext });
+          ws.addImage(imgId, {
+            tl: { col: 6, row: i + 1 },
+            ext: { width: 100, height: 70 },
+            editAs: "oneCell",
+          });
+          // Overwrite cell text — image shows instead
+          ws.getCell(row.number, 7).value = "";
+        } catch {
+          ws.getCell(row.number, 7).value = record.photo_url;
+          ws.getCell(row.number, 7).font = { color: { argb: "FF2563EB" }, underline: true };
+        }
+      }
+    }
+
+    // Cell styles
+    ws.eachRow((row, rowNum) => {
+      row.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Data_Absensi.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -69,7 +133,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="max-w-4xl w-full space-y-8">
+    <div className="max-w-6xl w-full space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -183,6 +247,8 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Username</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tanggal</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Waktu</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Lokasi</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Foto</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
@@ -194,6 +260,34 @@ export default function AdminPage() {
                       <td className="px-4 py-4 text-sm text-gray-500">{getMemberUsername(record.userId)}</td>
                       <td className="px-4 py-4 text-sm text-gray-700">{record.date}</td>
                       <td className="px-4 py-4 text-sm text-gray-500">{record.timestamp}</td>
+                      <td className="px-4 py-4 text-sm">
+                        {record.latitude && record.longitude ? (
+                          <a
+                            href={`https://www.google.com/maps?q=${record.latitude},${record.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-600 hover:text-indigo-800 underline"
+                          >
+                            {record.latitude.toFixed(4)}, {record.longitude.toFixed(4)}
+                          </a>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        {record.photo_url ? (
+                          <a href={record.photo_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={record.photo_url}
+                              alt="foto absen"
+                              className="w-12 h-12 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
+                            />
+                          </a>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-4">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           {record.status}

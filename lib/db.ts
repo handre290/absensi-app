@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { User } from "./types";
+import { User, Attendance } from "./types";
 
 // ── Login ──
 
@@ -45,7 +45,6 @@ export async function register(
   username: string,
   password: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Cek duplikat
   const { data: existing } = await supabase
     .from("users")
     .select("id")
@@ -92,7 +91,7 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function saveUsers(_users: User[]) {
-  // Tidak perlu implementasi karena update via Supabase langsung
+  // noop — update via Supabase directly
 }
 
 // ── Update User ──
@@ -110,9 +109,43 @@ export async function deleteUser(id: string): Promise<void> {
   await supabase.from("users").delete().eq("id", id);
 }
 
+// ── Photo Upload ──
+
+export async function uploadPhoto(file: File): Promise<string | null> {
+  const ext = file.name.split(".").pop() || "jpg";
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const { data, error } = await supabase.storage
+    .from("attendance-photos")
+    .upload(fileName, file, { contentType: file.type });
+
+  if (error) {
+    console.error("Upload photo error:", error);
+    return null;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("attendance-photos")
+    .getPublicUrl(data.path);
+
+  return urlData.publicUrl;
+}
+
 // ── Attendance ──
 
-export async function getAttendance(): Promise<any[]> {
+function mapAttendance(a: any): Attendance {
+  return {
+    id: a.id,
+    userId: a.user_id,
+    date: a.date,
+    timestamp: a.timestamp,
+    status: a.status,
+    latitude: a.latitude ?? null,
+    longitude: a.longitude ?? null,
+    photo_url: a.photo_url ?? null,
+  };
+}
+
+export async function getAttendance(): Promise<Attendance[]> {
   const { data, error } = await supabase
     .from("attendance")
     .select("*")
@@ -120,16 +153,10 @@ export async function getAttendance(): Promise<any[]> {
     .order("timestamp", { ascending: false });
 
   if (error) return [];
-  return data.map((a: any) => ({
-    id: a.id,
-    userId: a.user_id,
-    date: a.date,
-    timestamp: a.timestamp,
-    status: a.status,
-  }));
+  return data.map(mapAttendance);
 }
 
-export async function getUserAttendance(userId: string): Promise<any[]> {
+export async function getUserAttendance(userId: string): Promise<Attendance[]> {
   const { data, error } = await supabase
     .from("attendance")
     .select("*")
@@ -138,16 +165,10 @@ export async function getUserAttendance(userId: string): Promise<any[]> {
     .order("timestamp", { ascending: false });
 
   if (error) return [];
-  return data.map((a: any) => ({
-    id: a.id,
-    userId: a.user_id,
-    date: a.date,
-    timestamp: a.timestamp,
-    status: a.status,
-  }));
+  return data.map(mapAttendance);
 }
 
-export async function getTodayAttendance(userId: string): Promise<any | undefined> {
+export async function getTodayAttendance(userId: string): Promise<Attendance | undefined> {
   const today = new Date().toISOString().split("T")[0];
   const { data, error } = await supabase
     .from("attendance")
@@ -157,13 +178,7 @@ export async function getTodayAttendance(userId: string): Promise<any | undefine
     .maybeSingle();
 
   if (error || !data) return undefined;
-  return {
-    id: data.id,
-    userId: data.user_id,
-    date: data.date,
-    timestamp: data.timestamp,
-    status: data.status,
-  };
+  return mapAttendance(data);
 }
 
 export async function addAttendance(record: {
@@ -171,12 +186,18 @@ export async function addAttendance(record: {
   date: string;
   timestamp: string;
   status: string;
-}): Promise<any> {
+  latitude?: number | null;
+  longitude?: number | null;
+  photo_url?: string | null;
+}): Promise<void> {
   const { error } = await supabase.from("attendance").insert({
     user_id: record.userId,
     date: record.date,
     timestamp: record.timestamp,
     status: record.status,
+    latitude: record.latitude ?? null,
+    longitude: record.longitude ?? null,
+    photo_url: record.photo_url ?? null,
   });
 
   if (error) throw new Error(error.message);
