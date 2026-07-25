@@ -79,34 +79,9 @@ export default function AdminPage() {
         koordinat: record.latitude && record.longitude
           ? `${record.latitude}, ${record.longitude}`
           : "-",
-        foto: record.photo_url ? "Lihat foto" : "-",
+        foto: record.photo_url ? "Ada" : "-",
         status: record.status,
       });
-
-      // Set row height for photo
-      const row = ws.getRow(i + 2);
-      row.height = 75;
-
-      // Embed photo if exists
-      if (record.photo_url) {
-        try {
-          const res = await fetch(record.photo_url);
-          const blob = await res.blob();
-          const buffer = await blob.arrayBuffer();
-          const ext = (blob.type.split("/")[1] || "jpeg") as "jpeg" | "png" | "gif";
-          const imgId = wb.addImage({ buffer, extension: ext });
-          ws.addImage(imgId, {
-            tl: { col: 6, row: i + 1 },
-            ext: { width: 100, height: 70 },
-            editAs: "oneCell",
-          });
-          // Overwrite cell text — image shows instead
-          ws.getCell(row.number, 7).value = "";
-        } catch {
-          ws.getCell(row.number, 7).value = record.photo_url;
-          ws.getCell(row.number, 7).font = { color: { argb: "FF2563EB" }, underline: true };
-        }
-      }
     }
 
     // Cell styles
